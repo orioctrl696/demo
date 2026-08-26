@@ -1,6 +1,9 @@
 name: Client Demo - Complete CI/CD Pipeline
 
 on:
+  pull_request:
+  push:
+    branches: [main, master, develop, feature]
   workflow_dispatch:
     inputs:
       demo-mode:
