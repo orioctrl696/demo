@@ -1,0 +1,54 @@
+name: Artifact Management
+
+on:
+  workflow_run:
+    workflows: ['Application Build']
+    types: [completed]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: Name of the uploaded artifact
+        required: false
+        default: application
+        type: string
+      retention-days:
+        description: Artifact retention period
+        required: false
+        default: 14
+        type: number
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  artifact:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      ARTIFACT_NAME: ${{ inputs.artifact-name || 'application' }}
+      RETENTION_DAYS: ${{ inputs.retention-days || 14 }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve build artifact
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: application-${{ github.event.workflow_run.head_sha }}
+          path: retrieved-artifact
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Package repository when no build artifact exists
+        if: github.event_name != 'workflow_run'
+        run: tar -czf "${{ env.ARTIFACT_NAME }}-${{ github.sha }}.tar.gz" --exclude=.git .
+      - name: Validate artifact
+        run: find . -type f -name '*.tar.gz' -print
+      - name: Store approved artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-${{ github.sha }}
+          path: |
+            ${{ env.ARTIFACT_NAME }}-${{ github.sha }}.tar.gz
+            retrieved-artifact
+          retention-days: ${{ env.RETENTION_DAYS }}

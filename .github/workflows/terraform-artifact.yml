@@ -1,0 +1,117 @@
+name: Terraform Approved Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan-run-id:
+        description: Successful Terraform Plan workflow run ID
+        required: true
+        type: string
+      pr-number:
+        description: Approved Terraform PR number
+        required: true
+        type: string
+      terraform-root:
+        description: Directory containing Terraform configuration
+        required: false
+        default: .
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+env:
+  JFROG_URL: ${{ vars.JFROG_URL }}
+  JFROG_REPOSITORY: ${{ vars.JFROG_TERRAFORM_REPOSITORY || 'terraform-approved' }}
+
+jobs:
+  verify-pr:
+    name: Verify PR Approval and Plan
+    runs-on: ubuntu-latest
+    outputs:
+      head-sha: ${{ steps.verify.outputs.head_sha }}
+      destroy-count: ${{ steps.summary.outputs.destroy_count }}
+    steps:
+      - name: Verify approved PR and successful plan run
+        id: verify
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+          PLAN_RUN_ID: ${{ inputs.plan-run-id }}
+        run: |
+          state=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.state')
+          approved=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" --jq '[.[] | select(.state == "APPROVED")] | length')
+          run_conclusion=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PLAN_RUN_ID}" --jq '.conclusion')
+          head_sha=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')
+          test "$state" = open
+          test "$approved" -gt 0
+          test "$run_conclusion" = success
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Download plan summary
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ steps.verify.outputs.head_sha }}
+          path: plan-output
+          run-id: ${{ inputs.plan-run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read destroy count
+        id: summary
+        run: |
+          destroy_count=$(grep '^DESTROY_COUNT=' plan-output/terraform-summary.env | cut -d= -f2)
+          echo "destroy_count=$destroy_count" >> "$GITHUB_OUTPUT"
+          echo "destroy_count=$destroy_count" >> "$GITHUB_ENV"
+
+  high-risk-approval:
+    name: Manual Approval for Destroy > 5
+    needs: verify-pr
+    if: needs.verify-pr.outputs.destroy-count > 5
+    runs-on: ubuntu-latest
+    environment: terraform-destroy-approval
+    steps:
+      - run: echo "High-risk Terraform change manually approved."
+
+  package-and-push:
+    name: Package and Push Approved ZIP
+    needs: [verify-pr, high-risk-approval]
+    if: always() && needs.verify-pr.result == 'success' && (needs.high-risk-approval.result == 'success' || needs.high-risk-approval.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download approved plan outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ needs.verify-pr.outputs.head-sha }}
+          path: plan-output
+          run-id: ${{ inputs.plan-run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify-pr.outputs.head-sha }}
+
+      - name: Create approved Terraform ZIP
+        env:
+          HEAD_SHA: ${{ needs.verify-pr.outputs.head-sha }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+        run: |
+          mkdir approved-terraform
+          cp -R "${{ inputs.terraform-root }}" approved-terraform/config
+          cp plan-output/tfplan plan-output/tfplan.json plan-output/terraform-review.md plan-output/terraform-summary.env approved-terraform/
+          printf 'PR_ID=%s\nCOMMIT_SHA=%s\nTERRAFORM_VERSION=%s\n' "$PR_NUMBER" "$HEAD_SHA" "${{ vars.TF_VERSION || '1.9.8' }}" > approved-terraform/metadata.env
+          zip -qr "terraform-approved-${HEAD_SHA}.zip" approved-terraform
+
+      - name: Push immutable ZIP to JFrog
+        env:
+          JFROG_USER: ${{ secrets.JFROG_USER }}
+          JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+          HEAD_SHA: ${{ needs.verify-pr.outputs.head-sha }}
+        run: |
+          test -n "$JFROG_URL"
+          test -n "$JFROG_USER"
+          test -n "$JFROG_TOKEN"
+          curl --fail --show-error --retry 3 -u "$JFROG_USER:$JFROG_TOKEN" \
+            -T "terraform-approved-${HEAD_SHA}.zip" \
+            "${JFROG_URL%/}/${JFROG_REPOSITORY}/terraform-approved-${HEAD_SHA}.zip"

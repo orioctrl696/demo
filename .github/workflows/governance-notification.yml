@@ -1,0 +1,32 @@
+name: Governance Notification
+
+on:
+  workflow_run:
+    workflows: ['Application Build', 'Test Quality', 'Application Security']
+    types: [completed]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report workflow status
+        run: |
+          echo "Workflow: ${{ github.event.workflow_run.name || github.workflow }}"
+          echo "Conclusion: ${{ github.event.workflow_run.conclusion || 'manual' }}"
+      - name: Create issue for failure
+        if: github.event_name == 'workflow_call' || github.event.workflow_run.conclusion == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Pipeline failure: ${context.payload.workflow_run.name}`,
+              body: `Run: ${context.payload.workflow_run.html_url}`
+            });

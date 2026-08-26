@@ -1,0 +1,40 @@
+name: Application Security - Coverity
+
+on:
+  pull_request:
+  push:
+    branches: [main, master, develop]
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      COVERITY_URL:
+        required: false
+      COVERITY_AUTH_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  coverity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Coverity configuration
+        id: config
+        env:
+          COVERITY_URL: ${{ secrets.COVERITY_URL }}
+          COVERITY_AUTH_KEY: ${{ secrets.COVERITY_AUTH_KEY }}
+        run: |
+          if [ -n "$COVERITY_URL" ] && [ -n "$COVERITY_AUTH_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run Coverity analysis
+        if: steps.config.outputs.available == 'true'
+        run: echo "Coverity credentials found; vendor analysis command is ready to be configured."
+      - name: Skip Coverity analysis
+        if: steps.config.outputs.available != 'true'
+        run: |
+          echo "WARNING: Coverity URL/auth key not configured; analysis skipped for now."

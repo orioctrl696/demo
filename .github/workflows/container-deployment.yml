@@ -1,0 +1,156 @@
+name: OpenShift Container Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        default: staging
+        type: environment
+      image:
+        description: Container image to deploy
+        required: true
+        type: string
+      namespace:
+        description: OpenShift project/namespace
+        required: true
+        type: string
+      deployment:
+        description: Deployment or DeploymentConfig name
+        required: true
+        type: string
+      resource-kind:
+        description: OpenShift workload kind
+        required: false
+        default: deployment
+        type: choice
+        options: [deployment, deploymentconfig]
+      container:
+        description: Container name inside the workload
+        required: true
+        type: string
+      route-url:
+        description: OpenShift Route URL for post-deployment validation
+        required: true
+        type: string
+      readiness-path:
+        description: Readiness endpoint path
+        required: false
+        default: /
+        type: string
+      liveness-path:
+        description: Liveness endpoint path
+        required: false
+        default: /
+        type: string
+      smoke-path:
+        description: Smoke-test endpoint path
+        required: false
+        default: /
+        type: string
+  workflow_call:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        type: string
+      image:
+        description: Container image to deploy
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      deployment:
+        required: true
+        type: string
+      resource-kind:
+        required: false
+        default: deployment
+        type: string
+      container:
+        required: true
+        type: string
+      route-url:
+        required: true
+        type: string
+      readiness-path:
+        required: false
+        default: /
+        type: string
+      liveness-path:
+        required: false
+        default: /
+        type: string
+      smoke-path:
+        required: false
+        default: /
+        type: string
+    secrets:
+      OPENSHIFT_SERVER:
+        required: true
+      OPENSHIFT_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Validate deployment input
+        env:
+          IMAGE: ${{ inputs.image }}
+          NAMESPACE: ${{ inputs.namespace }}
+          DEPLOYMENT: ${{ inputs.deployment }}
+          CONTAINER: ${{ inputs.container }}
+          RESOURCE_KIND: ${{ inputs.resource-kind || 'deployment' }}
+        run: |
+          test -n "$IMAGE"
+          test -n "$NAMESPACE"
+          test -n "$DEPLOYMENT"
+          test -n "$CONTAINER"
+          test "$RESOURCE_KIND" = deployment -o "$RESOURCE_KIND" = deploymentconfig
+      - name: Log in to OpenShift
+        uses: redhat-actions/oc-login@v1
+        with:
+          openshift_server_url: ${{ secrets.OPENSHIFT_SERVER }}
+          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
+          namespace: ${{ inputs.namespace }}
+          insecure_skip_tls_verify: false
+      - name: Update workload image
+        env:
+          IMAGE: ${{ inputs.image }}
+          DEPLOYMENT: ${{ inputs.deployment }}
+          CONTAINER: ${{ inputs.container }}
+          RESOURCE_KIND: ${{ inputs.resource-kind || 'deployment' }}
+        run: oc set image "$RESOURCE_KIND/$DEPLOYMENT" "$CONTAINER=$IMAGE" --record=true
+      - name: Wait for rollout
+        env:
+          DEPLOYMENT: ${{ inputs.deployment }}
+          RESOURCE_KIND: ${{ inputs.resource-kind || 'deployment' }}
+        run: oc rollout status "$RESOURCE_KIND/$DEPLOYMENT" --timeout=10m
+      - name: Show deployed workload
+        env:
+          DEPLOYMENT: ${{ inputs.deployment }}
+          RESOURCE_KIND: ${{ inputs.resource-kind || 'deployment' }}
+        run: oc get "$RESOURCE_KIND" "$DEPLOYMENT" -o wide
+  validation:
+    name: Validate deployment and roll back on failure
+    needs: deploy
+    if: always()
+    uses: ./.github/workflows/deployment-validation.yml
+    with:
+      url: ${{ inputs.route-url }}
+      namespace: ${{ inputs.namespace }}
+      deployment: ${{ inputs.deployment }}
+      resource-kind: ${{ inputs.resource-kind || 'deployment' }}
+      readiness-path: ${{ inputs.readiness-path || '/' }}
+      liveness-path: ${{ inputs.liveness-path || '/' }}
+      smoke-path: ${{ inputs.smoke-path || '/' }}
+    secrets:
+      OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
+      OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}

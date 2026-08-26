@@ -1,0 +1,214 @@
+name: Terraform Plan and Apply
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**/*.tf'
+      - '**/*.tfvars'
+      - '.github/workflows/terraform-apply.yml'
+      - '.github/scripts/terraform-plan-review.py'
+  workflow_dispatch:
+    inputs:
+      terraform-root:
+        description: Directory containing the Terraform configuration
+        required: false
+        default: .
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  TF_ROOT: ${{ inputs.terraform-root || vars.TF_ROOT || '.' }}
+  TF_VERSION: ${{ vars.TF_VERSION || '1.9.8' }}
+  JFROG_URL: ${{ vars.JFROG_URL }}
+  JFROG_REPOSITORY: ${{ vars.JFROG_TERRAFORM_REPOSITORY || 'terraform-approved' }}
+
+jobs:
+  plan:
+    name: Generate and Review Terraform Plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout reviewed commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Check Terraform formatting
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform fmt -check -diff -recursive
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+
+      - name: Run TFLint
+        run: tflint --init && tflint --chdir "${TF_ROOT}"
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: ${{ env.TF_ROOT }}
+
+      - name: Initialize Terraform
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform init -input=false
+
+      - name: Validate Terraform
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform validate -no-color
+
+      - name: Generate binary plan
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform plan -input=false -out=tfplan -no-color
+
+      - name: Convert plan to JSON
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform show -json tfplan > tfplan.json
+
+      - name: Build review report with the repository script
+        env:
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number || 'manual' }}
+        run: |
+          python .github/scripts/terraform-plan-review.py \
+            --plan-json "${TF_ROOT}/tfplan.json" \
+            --output terraform-review.md \
+            --summary-output terraform-summary.env \
+            --commit-sha "$COMMIT_SHA" \
+            --pr-number "$PR_NUMBER"
+
+      - name: Publish review report to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('terraform-review.md', 'utf8');
+            const marker = '<!-- terraform-plan-review -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            const existing = comments.find(comment => comment.body.includes(marker));
+            const payload = { owner: context.repo.owner, repo: context.repo.repo, body: `${marker}\n${body}` };
+            if (existing) {
+              await github.rest.issues.updateComment({ ...payload, comment_id: existing.id });
+            } else {
+              await github.rest.issues.createComment({ ...payload, issue_number: context.issue.number });
+            }
+
+      - name: Upload reviewed plan
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p plan-output
+          cp "${TF_ROOT}/tfplan" plan-output/tfplan
+          cp "${TF_ROOT}/tfplan.json" plan-output/tfplan.json
+          cp terraform-review.md terraform-summary.env plan-output/
+
+      - name: Store reviewed plan
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.run_id }}
+          path: plan-output
+          if-no-files-found: error
+          retention-days: 14
+
+  approval:
+    name: Manual Approval Before Apply
+    needs: plan
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: terraform-apply
+    steps:
+      - run: echo "Terraform plan reviewed; waiting for environment approval."
+
+  package-and-push:
+    name: Push Approved Plan to JFrog
+    needs: [plan, approval]
+    if: github.event_name == 'workflow_dispatch' && needs.approval.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout planned commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Download reviewed plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ github.run_id }}
+          path: plan-output
+
+      - name: Create immutable Terraform ZIP
+        env:
+          JFROG_ZIP: ${{ runner.temp }}/terraform-approved-${{ github.run_id }}.zip
+        run: |
+          mkdir -p "${RUNNER_TEMP}/approved-terraform/config"
+          cp -R "${TF_ROOT}/." "${RUNNER_TEMP}/approved-terraform/config/"
+          cp plan-output/tfplan plan-output/tfplan.json plan-output/terraform-review.md plan-output/terraform-summary.env "${RUNNER_TEMP}/approved-terraform/"
+          printf 'COMMIT_SHA=%s\nRUN_ID=%s\nTERRAFORM_VERSION=%s\n' \
+            "${GITHUB_SHA}" "${GITHUB_RUN_ID}" "${TF_VERSION}" > "${RUNNER_TEMP}/approved-terraform/metadata.env"
+          cd "${RUNNER_TEMP}"
+          zip -qr "${JFROG_ZIP}" approved-terraform
+
+      - name: Push approved ZIP to JFrog
+        env:
+          JFROG_USER: ${{ secrets.JFROG_USER }}
+          JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+          JFROG_ZIP: ${{ runner.temp }}/terraform-approved-${{ github.run_id }}.zip
+        run: |
+          test -n "${JFROG_URL}"
+          test -n "${JFROG_USER}"
+          test -n "${JFROG_TOKEN}"
+          curl --fail --show-error --retry 3 -u "${JFROG_USER}:${JFROG_TOKEN}" \
+            -T "${JFROG_ZIP}" \
+            "${JFROG_URL%/}/${JFROG_REPOSITORY}/terraform-approved-${GITHUB_RUN_ID}.zip"
+
+  apply:
+    name: Apply Reviewed Terraform Plan
+    needs: [plan, approval, package-and-push]
+    if: github.event_name == 'workflow_dispatch' && needs.approval.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull approved ZIP from JFrog
+        env:
+          JFROG_USER: ${{ secrets.JFROG_USER }}
+          JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+        run: |
+          test -n "${JFROG_URL}"
+          curl --fail --show-error --retry 3 -u "${JFROG_USER}:${JFROG_TOKEN}" \
+            -o approved.zip \
+            "${JFROG_URL%/}/${JFROG_REPOSITORY}/terraform-approved-${GITHUB_RUN_ID}.zip"
+          unzip -q approved.zip
+
+      - name: Verify pulled artifact
+        run: |
+          grep -q "COMMIT_SHA=${GITHUB_SHA}" approved-terraform/metadata.env
+          test -f approved-terraform/tfplan
+          test -f approved-terraform/tfplan.json
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Initialize without creating a new plan
+        working-directory: approved-terraform/config
+        run: terraform init -input=false
+
+      - name: Apply the reviewed plan
+        working-directory: approved-terraform/config
+        run: terraform apply -input=false -auto-approve ../tfplan
+
+      - name: Deployment complete
+        run: echo "Only the reviewed and manually approved Terraform plan was applied."

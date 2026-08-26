@@ -1,0 +1,65 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  validate-metadata:
+    name: Validate PR Metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate pull request metadata
+        if: github.event_name == 'pull_request'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: test -n "$TITLE"
+
+  application-build:
+    name: Application Build
+    needs: validate-metadata
+    uses: ./.github/workflows/application-build.yml
+
+  test-quality:
+    name: Test and Quality
+    needs: application-build
+    uses: ./.github/workflows/test-quality.yml
+
+  coverity:
+    name: Coverity Scan
+    needs: application-build
+    uses: ./.github/workflows/coverity-scan.yml
+
+  black-duck:
+    name: Black Duck Scan
+    needs: application-build
+    uses: ./.github/workflows/blackduck-scan.yml
+
+  secret-scan:
+    name: Secret Scan
+    needs: validate-metadata
+    uses: ./.github/workflows/secret-scan.yml
+
+  iac-security:
+    name: IaC Security
+    needs: validate-metadata
+    uses: ./.github/workflows/iac-security.yml
+
+  quality-security-gate:
+    name: PR Quality and Security Gates
+    if: always()
+    needs: [application-build, test-quality, coverity, black-duck, secret-scan, iac-security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all applicable checks to pass
+        env:
+          RESULTS: ${{ join(needs.*.result, ',') }}
+        run: |
+          echo "Check results: $RESULTS"
+          test "$RESULTS" != *failure*
+          test "$RESULTS" != *cancelled*
