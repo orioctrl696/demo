@@ -1,0 +1,70 @@
+name: Container Build Security
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      context:
+        description: Docker build context
+        required: false
+        default: .
+        type: string
+      dockerfile:
+        description: Dockerfile path
+        required: false
+        default: Dockerfile
+        type: string
+      image:
+        description: Local image name used for scanning
+        required: false
+        default: local/application
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Check for Dockerfile
+        id: dockerfile
+        shell: bash
+        run: test -f "${{ inputs.dockerfile || 'Dockerfile' }}" && echo "found=true" >> "$GITHUB_OUTPUT" || echo "found=false" >> "$GITHUB_OUTPUT"
+      - name: Build image
+        if: steps.dockerfile.outputs.found == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context || '.' }}
+          file: ${{ inputs.dockerfile || 'Dockerfile' }}
+          load: true
+          tags: ${{ inputs.image || 'local/application' }}:${{ github.sha }}
+      - name: Record image metadata
+        if: steps.dockerfile.outputs.found == 'true'
+        run: |
+          printf 'image=%s\n' "${{ inputs.image || 'local/application' }}:${{ github.sha }}" > image-metadata.txt
+          printf 'commit=%s\n' "${{ github.sha }}" >> image-metadata.txt
+      - name: Publish image metadata
+        if: steps.dockerfile.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-metadata-${{ github.sha }}
+          path: image-metadata.txt
+      - name: Scan image
+        if: steps.dockerfile.outputs.found == 'true'
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: ${{ inputs.image || 'local/application' }}:${{ github.sha }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+      - name: No Dockerfile found
+        if: steps.dockerfile.outputs.found != 'true'
+        run: echo "No Dockerfile found; container build skipped."

@@ -1,0 +1,298 @@
+<mxfile host="app.diagrams.net" agent="GitHub Copilot">
+  <diagram id="openshift-cicd" name="OpenShift CI/CD Pipeline">
+    <mxGraphModel dx="3445" dy="1298" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="2250" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=26;fontStyle=1;fontColor=#1F2937;align=left;verticalAlign=middle;" value="OpenShift CI/CD Pipeline" vertex="1">
+          <mxGeometry height="40" width="500" x="50" y="25" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=13;fontColor=#64748B;align=left;verticalAlign=middle;" value="Reusable GitHub Actions templates | Application + Terraform delivery | Only reviewed changes are deployed" vertex="1">
+          <mxGeometry height="25" width="600" x="53" y="62" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-pr" parent="1" style="swimlane;html=1;rounded=1;arcSize=8;horizontal=0;startSize=34;fillColor=#F8FAFC;strokeColor=#CBD5E1;fontColor=#334155;fontStyle=1;fontSize=14;" value="1. PULL REQUEST VALIDATION" vertex="1">
+          <mxGeometry height="760" width="330" x="50" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-build" parent="1" style="swimlane;html=1;rounded=1;arcSize=8;horizontal=0;startSize=34;fillColor=#F0FDF4;strokeColor=#86EFAC;fontColor=#166534;fontStyle=1;fontSize=14;" value="2. BUILD AND PACKAGE" vertex="1">
+          <mxGeometry height="760" width="330" x="410" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-security" parent="1" style="swimlane;html=1;rounded=1;arcSize=8;horizontal=0;startSize=34;fillColor=#FFF7ED;strokeColor=#FDBA74;fontColor=#9A3412;fontStyle=1;fontSize=14;" value="3. SECURITY AND QUALITY" vertex="1">
+          <mxGeometry height="760" width="330" x="770" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-release" parent="1" style="swimlane;html=1;rounded=1;arcSize=8;horizontal=0;startSize=34;fillColor=#EFF6FF;strokeColor=#93C5FD;fontColor=#1D4ED8;fontStyle=1;fontSize=14;" value="4. RELEASE AND DEPLOY" vertex="1">
+          <mxGeometry height="760" width="420" x="1130" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-terraform" parent="1" style="swimlane;html=1;rounded=1;arcSize=8;horizontal=0;startSize=34;fillColor=#FAF5FF;strokeColor=#C4B5FD;fontColor=#6D28D9;fontStyle=1;fontSize=14;" value="5. TERRAFORM APPROVED ARTIFACT FLOW" vertex="1">
+          <mxGeometry height="1400" width="1500" x="50" y="850" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-zip" parent="lane-terraform" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7C3AED;fontColor=#5B21B6;fontSize=14;spacing=8;" value="terraform-artifact.yml&#xa;Create approved ZIP artifact&#xa;PR ID | SHA | plan summary&#xa;Counts | approvals | TF version" vertex="1">
+          <mxGeometry height="90" width="320" x="290" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="jfrog" parent="lane-terraform" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E7FF;strokeColor=#6366F1;fontColor=#3730A3;fontStyle=1;fontSize=14;spacing=8;" value="JFrog Artifactory&#xa;Push approved ZIP&#xa;Immutable deployment artifact" vertex="1">
+          <mxGeometry height="75" width="320" x="300" y="680" as="geometry" />
+        </mxCell>
+        <mxCell id="e41" edge="1" parent="lane-terraform" source="tf-zip" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#7C3AED;" target="jfrog">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-release-trigger" parent="lane-terraform" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#3B82F6;fontColor=#1D4ED8;fontSize=14;spacing=8;" value="Release Trigger&#xa;Approved artifact selected" vertex="1">
+          <mxGeometry height="65" width="320" x="750" y="630" as="geometry" />
+        </mxCell>
+        <mxCell id="e42" edge="1" parent="lane-terraform" source="jfrog" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#6366F1;" target="tf-release-trigger">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-release-pipeline" parent="lane-terraform" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#3B82F6;fontColor=#1D4ED8;fontSize=14;spacing=8;" value="Release / Apply Pipeline&#xa;Consume approved artifact&#xa;No new plan from source" vertex="1">
+          <mxGeometry height="75" width="320" x="1160" y="695" as="geometry" />
+        </mxCell>
+        <mxCell id="e43" edge="1" parent="lane-terraform" source="tf-release-trigger" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#3B82F6;" target="tf-release-pipeline">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-pull" parent="lane-terraform" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E7FF;strokeColor=#6366F1;fontColor=#3730A3;fontSize=14;spacing=8;" value="JFrog download&#xa;Pull same approved ZIP artifact" vertex="1">
+          <mxGeometry height="65" width="320" x="450" y="870" as="geometry" />
+        </mxCell>
+        <mxCell id="e44" edge="1" parent="lane-terraform" source="tf-release-pipeline" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#3B82F6;" target="tf-pull">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-apply" parent="lane-terraform" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E7FF;strokeColor=#6366F1;fontColor=#3730A3;fontStyle=1;fontSize=14;spacing=8;" value="terraform-apply.yml&#xa;terraform apply from approved ZIP&#xa;Reviewed plan is applied" vertex="1">
+          <mxGeometry height="75" width="320" x="930" y="850" as="geometry" />
+        </mxCell>
+        <mxCell id="e45" edge="1" parent="lane-terraform" source="tf-pull" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#6366F1;" target="tf-apply">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-deploy" parent="lane-terraform" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#22C55E;fontColor=#166534;fontStyle=1;fontSize=14;spacing=8;" value="Deploy&#xa;Infrastructure changes live" vertex="1">
+          <mxGeometry height="60" width="320" x="650" y="1010" as="geometry" />
+        </mxCell>
+        <mxCell id="e46" edge="1" parent="lane-terraform" source="tf-apply" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#22C55E;" target="tf-deploy">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pr-open" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#64748B;fontColor=#1F2937;fontSize=14;spacing=8;" value="pr.yml&#xa;PR opened / updated" vertex="1">
+          <mxGeometry height="55" width="250" x="90" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="pr-meta" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#64748B;fontColor=#1F2937;fontSize=14;spacing=8;" value="pr.yml&#xa;Validate PR metadata" vertex="1">
+          <mxGeometry height="55" width="250" x="90" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="ai-approval" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#8B5CF6;fontColor=#5B21B6;fontStyle=1;fontSize=14;spacing=8;" value="ai-review.yml&#xa;AI approval&#xa;Review summary + risk" vertex="1">
+          <mxGeometry height="65" width="250" x="90" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="pr-gate" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#F59E0B;fontColor=#92400E;fontStyle=1;fontSize=14;spacing=8;" value="pr.yml&#xa;PR quality, security &amp; AI gate&#xa;All checks must pass" vertex="1">
+          <mxGeometry height="70" width="250" x="90" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="merge" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#22C55E;fontColor=#166534;fontStyle=1;fontSize=14;spacing=8;" value="Merge allowed&#xa;Protected branch" vertex="1">
+          <mxGeometry height="45" width="250" x="90" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="build" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#22C55E;fontColor=#166534;fontSize=14;spacing=8;" value="application-build.yml&#xa;Build matrix by tech stack&#xa;Java / Maven or Gradle&#xa;Node.js / npm&#xa;Python / .NET / Go" vertex="1">
+          <mxGeometry height="110" width="250" x="450" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="package" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#22C55E;fontColor=#166534;fontSize=14;spacing=8;" value="application-build.yml&#xa;Package application&#xa;Publish build artifact" vertex="1">
+          <mxGeometry height="75" width="250" x="450" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="container" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#3B82F6;fontColor=#1E40AF;fontSize=14;spacing=8;" value="container-build-security.yml&#xa;Build Docker image&#xa;Tag with commit SHA&#xa;Trivy vulnerability scan" vertex="1">
+          <mxGeometry height="95" width="250" x="450" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="registry" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E7FF;strokeColor=#6366F1;fontColor=#3730A3;fontStyle=1;fontSize=14;spacing=8;" value="container-build-security.yml&#xa;Push approved image&#xa;Container registry" vertex="1">
+          <mxGeometry height="60" width="250" x="450" y="650" as="geometry" />
+        </mxCell>
+        <mxCell id="artifact" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ECFDF5;strokeColor=#10B981;fontColor=#047857;fontSize=14;spacing=8;" value="artifact-management.yml&#xa;Retrieve / validate&#xa;Store approved artifact" vertex="1">
+          <mxGeometry height="60" width="250" x="810" y="735" as="geometry" />
+        </mxCell>
+        <mxCell id="tests" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F97316;fontColor=#9A3412;fontSize=14;spacing=8;" value="test-quality.yml&#xa;Test &amp; quality&#xa;npm test + lint" vertex="1">
+          <mxGeometry height="65" width="250" x="810" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="coverity" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F97316;fontColor=#9A3412;fontSize=14;spacing=8;" value="coverity-scan.yml&#xa;Coverity static analysis" vertex="1">
+          <mxGeometry height="55" width="250" x="810" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="blackduck" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F97316;fontColor=#9A3412;fontSize=14;spacing=8;" value="blackduck-scan.yml&#xa;Black Duck&#xa;Dependency &amp; license scan" vertex="1">
+          <mxGeometry height="65" width="250" x="810" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="secrets" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F97316;fontColor=#9A3412;fontSize=14;spacing=8;" value="secret-scan.yml&#xa;Secret scan&#xa;Gitleaks" vertex="1">
+          <mxGeometry height="55" width="250" x="810" y="455" as="geometry" />
+        </mxCell>
+        <mxCell id="iac" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F97316;fontColor=#9A3412;fontSize=14;spacing=8;" value="iac-security.yml&#xa;IaC security&#xa;TFLint + tfsec" vertex="1">
+          <mxGeometry height="55" width="250" x="810" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="security-result" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#F59E0B;fontColor=#92400E;fontStyle=1;fontSize=14;spacing=8;" value="pr.yml&#xa;Findings evaluated&#xa;Security gate" vertex="1">
+          <mxGeometry height="60" width="250" x="810" y="650" as="geometry" />
+        </mxCell>
+        <mxCell id="release" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#3B82F6;fontColor=#1D4ED8;fontSize=14;spacing=8;" value="release-management.yml&#xa;Version + tag + release notes" vertex="1">
+          <mxGeometry height="70" width="320" x="1180" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="approval" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#F59E0B;fontColor=#92400E;fontStyle=1;fontSize=14;spacing=8;" value="governance-notification.yml&#xa;Environment approval&#xa;Change / audit gate" vertex="1">
+          <mxGeometry height="70" width="320" x="1180" y="285" as="geometry" />
+        </mxCell>
+        <mxCell id="openshift" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDEAFE;strokeColor=#2563EB;fontColor=#1E3A8A;fontStyle=1;fontSize=14;spacing=8;" value="container-deployment.yml&#xa;OpenShift deployment&#xa;oc login → set image&#xa;Deployment / DeploymentConfig" vertex="1">
+          <mxGeometry height="95" width="320" x="1180" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="rollout" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#3B82F6;fontColor=#1D4ED8;fontSize=14;spacing=8;" value="container-deployment.yml&#xa;Rollout monitoring&#xa;oc rollout status" vertex="1">
+          <mxGeometry height="60" width="320" x="1180" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="validate" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#22C55E;fontColor=#166534;fontStyle=1;fontSize=14;spacing=8;" value="deployment-validation.yml&#xa;Route health check&#xa;Readiness + smoke test" vertex="1">
+          <mxGeometry height="60" width="320" x="1180" y="645" as="geometry" />
+        </mxCell>
+        <mxCell id="rollback" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#EF4444;fontColor=#991B1B;fontStyle=1;fontSize=14;spacing=8;" value="container-deployment.yml&#xa;Validation failed?&#xa;Rollback previous version" vertex="1">
+          <mxGeometry height="45" width="320" x="1180" y="735" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-code" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F3FF;strokeColor=#7C3AED;fontColor=#5B21B6;fontSize=14;spacing=8;" value="Terraform code&#xa;Infrastructure change" vertex="1">
+          <mxGeometry height="60" width="250" x="90" y="900" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-pr" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F3FF;strokeColor=#7C3AED;fontColor=#5B21B6;fontSize=14;spacing=8;" value="Terraform PR&#xa;Plan workflow triggered" vertex="1">
+          <mxGeometry height="60" width="250" x="90" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-plan" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7C3AED;fontColor=#5B21B6;fontSize=14;spacing=8;" value="terraform-plan.yml&#xa;fmt + validate&#xa;terraform plan" vertex="1">
+          <mxGeometry height="70" width="250" x="450" y="900" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-json" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7C3AED;fontColor=#5B21B6;fontSize=14;spacing=8;" value="terraform-plan.yml&#xa;terraform show -json&#xa;Terraform Plan JSON" vertex="1">
+          <mxGeometry height="70" width="250" x="450" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-analyzer" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F97316;fontColor=#9A3412;fontSize=14;spacing=8;" value="terraform-review.yml&#xa;JSON parser / plan analyzer&#xa;Extract resource actions" vertex="1">
+          <mxGeometry height="75" width="250" x="810" y="900" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-table" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7ED;strokeColor=#F97316;fontColor=#9A3412;fontSize=14;spacing=8;" value="Terraform Change Review Table&#xa;aws_instance.app | Create&#xa;aws_security_group.app | Update&#xa;aws_db_instance.prod | Destroy&#xa;Summary: Create / Update / Destroy counts" vertex="1">
+          <mxGeometry height="100" width="250" x="810" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-reviewer" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F97316;fontColor=#9A3412;fontStyle=1;fontSize=14;spacing=8;" value="PR Reviewer&#xa;Review resource-level changes&#xa;Table displayed in PR" vertex="1">
+          <mxGeometry height="75" width="320" x="1180" y="900" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-pr-approval" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#8B5CF6;fontColor=#5B21B6;fontStyle=1;fontSize=14;spacing=8;" value="PR Approval&#xa;Approved Terraform changes" vertex="1">
+          <mxGeometry height="65" width="320" x="1180" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-destroy-check" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#F59E0B;fontColor=#92400E;fontStyle=1;fontSize=14;spacing=6;" value="Destroy count &gt; 5?" vertex="1">
+          <mxGeometry height="90" width="180" x="1250" y="1110" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-continue" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#22C55E;fontColor=#166534;fontSize=14;spacing=8;" value="Continue&#xa;No: normal approval path" vertex="1">
+          <mxGeometry height="60" width="150" x="1140" y="1230" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-manual" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#EF4444;fontColor=#991B1B;fontStyle=1;fontSize=14;spacing=8;" value="Manual Approval Required&#xa;Yes: Destroy &gt; 5&#xa;Terraform Apply blocked" vertex="1">
+          <mxGeometry height="75" width="190" x="1360" y="1230" as="geometry" />
+        </mxCell>
+        <mxCell id="tf-granted" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#22C55E;fontColor=#166534;fontStyle=1;fontSize=14;spacing=8;" value="Approval Granted&#xa;Continue to packaging" vertex="1">
+          <mxGeometry height="60" width="190" x="1360" y="1340" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="pr-open" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="pr-meta">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="pr-meta" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="build">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="build" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="package">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="package" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="container">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="container" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="registry">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="build" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="tests">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="build" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="coverity">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="build" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="blackduck">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="pr-meta" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="secrets">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="pr-meta" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="iac">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="tests" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="security-result">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="coverity" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="security-result">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="blackduck" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="security-result">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="secrets" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="security-result">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="iac" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="security-result">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" edge="1" parent="1" source="security-result" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#8B5CF6;" target="ai-approval">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16b" edge="1" parent="1" source="ai-approval" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#8B5CF6;" target="pr-gate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" edge="1" parent="1" source="pr-gate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="merge">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="merge" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="release">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e19" edge="1" parent="1" source="registry" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="openshift">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e20" edge="1" parent="1" source="release" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="approval">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e21" edge="1" parent="1" source="approval" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="openshift">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e22" edge="1" parent="1" source="openshift" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="rollout">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e23" edge="1" parent="1" source="rollout" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="validate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e24" edge="1" parent="1" source="validate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#EF4444;fontColor=#991B1B;" target="rollback" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e25" edge="1" parent="1" source="validate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#22C55E;fontColor=#166534;" target="release" value="Yes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e26" edge="1" parent="1" source="package" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="artifact">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e27" edge="1" parent="1" source="artifact" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#64748B;" target="release">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e28" edge="1" parent="1" source="tf-code" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#7C3AED;" target="tf-pr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e29" edge="1" parent="1" source="tf-pr" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#7C3AED;" target="tf-plan">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e30" edge="1" parent="1" source="tf-plan" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#7C3AED;" target="tf-json">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e31" edge="1" parent="1" source="tf-json" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#7C3AED;" target="tf-analyzer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e32" edge="1" parent="1" source="tf-analyzer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#F97316;" target="tf-table">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e33" edge="1" parent="1" source="tf-table" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#F97316;" target="tf-reviewer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e34" edge="1" parent="1" source="tf-reviewer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#8B5CF6;" target="tf-pr-approval">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e35" edge="1" parent="1" source="tf-pr-approval" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#8B5CF6;" target="tf-destroy-check">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e36" edge="1" parent="1" source="tf-destroy-check" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#22C55E;fontColor=#166534;" target="tf-continue" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e37" edge="1" parent="1" source="tf-destroy-check" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#EF4444;fontColor=#991B1B;" target="tf-manual" value="Yes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e38" edge="1" parent="1" source="tf-continue" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#22C55E;" target="tf-zip">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e39" edge="1" parent="1" source="tf-manual" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#EF4444;" target="tf-granted">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e40" edge="1" parent="1" source="tf-granted" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;endArrow=block;flowAnimation=1;dashed=1;dashPattern=8 8;flowDuration=700;strokeWidth=2;strokeColor=#22C55E;" target="tf-zip">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=12;fontColor=#64748B;align=left;verticalAlign=middle;" value="All named files are reusable workflow templates   |   Green = success   |   Red = rollback   |   Blue = container/OpenShift   |   Terraform rule: only the reviewed and approved JFrog artifact is applied" vertex="1">
+          <mxGeometry height="30" width="1400" x="50" y="2180" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,61 @@
+name: Infrastructure as Code Security
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      directory:
+        description: Directory to scan
+        required: false
+        default: .
+        type: string
+      soft-fail:
+        description: Whether findings should fail the workflow
+        required: false
+        default: false
+        type: boolean
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      terraform: ${{ steps.files.outputs.terraform }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: files
+        run: |
+          if find "${{ inputs.directory || '.' }}" -name '*.tf' -print -quit | grep -q .; then
+            echo "terraform=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "terraform=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  checkov:
+    needs: detect
+    if: needs.detect.outputs.terraform == 'true'
+    runs-on: ubuntu-latest
+    env:
+      SCAN_DIRECTORY: ${{ inputs.directory || '.' }}
+      SOFT_FAIL: ${{ inputs.soft-fail || false }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run TFLint
+        uses: terraform-linters/setup-tflint@v4
+      - name: Execute TFLint
+        run: tflint --init && tflint --chdir "${{ env.SCAN_DIRECTORY }}"
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: ${{ env.SCAN_DIRECTORY }}
+          soft_fail: ${{ env.SOFT_FAIL }}
+
+  no-terraform:
+    needs: detect
+    if: needs.detect.outputs.terraform != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Terraform files found; TFLint and tfsec skipped."
