@@ -70,14 +70,14 @@ jobs:
         working-directory: ${{ env.WORKING_DIRECTORY }}
       - name: Package application
         if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != '' || hashFiles(format('{0}/pom.xml', env.WORKING_DIRECTORY)) != ''
-        run: tar -czf "${{ github.workspace }}/application-${{ github.sha }}.tar.gz" --exclude=node_modules --exclude=.git .
+        run: tar -czf "${{ runner.temp }}/application-${{ github.sha }}.tar.gz" --exclude=node_modules --exclude=.git --exclude=target .
         working-directory: ${{ env.WORKING_DIRECTORY }}
       - name: Publish build artifact and metadata
         if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != '' || hashFiles(format('{0}/pom.xml', env.WORKING_DIRECTORY)) != ''
         uses: actions/upload-artifact@v4
         with:
           name: application-${{ github.sha }}
-          path: application-${{ github.sha }}.tar.gz
+          path: ${{ runner.temp }}/application-${{ github.sha }}.tar.gz
       - name: No application manifest found
         if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) == '' && hashFiles(format('{0}/pom.xml', env.WORKING_DIRECTORY)) == ''
         run: echo "No package.json or pom.xml found; application build skipped."
