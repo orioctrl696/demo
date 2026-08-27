@@ -58,13 +58,34 @@ jobs:
           path: image-metadata.txt
       - name: Scan image
         if: steps.dockerfile.outputs.found == 'true'
-        uses: aquasecurity/trivy-action@0.31.0
+        continue-on-error: true
+        env:
+          IMAGE_NAME: ${{ inputs.image || 'local/application' }}:${{ github.sha }}
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/work" \
+            aquasec/trivy:0.59.1 image \
+            --format table \
+            --output /work/vulnerability-report.txt \
+            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            "$IMAGE_NAME"
+      - name: Publish vulnerability report
+        if: always() && steps.dockerfile.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
         with:
-          image-ref: ${{ inputs.image || 'local/application' }}:${{ github.sha }}
-          format: table
-          exit-code: '1'
-          ignore-unfixed: true
-          severity: CRITICAL,HIGH
+          name: vulnerability-report-${{ github.sha }}
+          path: vulnerability-report.txt
+          if-no-files-found: error
+      - name: Add vulnerability report to summary
+        if: always() && steps.dockerfile.outputs.found == 'true'
+        run: |
+          echo "## Vulnerability Report" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          cat vulnerability-report.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
       - name: No Dockerfile found
         if: steps.dockerfile.outputs.found != 'true'
         run: echo "No Dockerfile found; container build skipped."
