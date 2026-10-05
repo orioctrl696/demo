@@ -1,0 +1,83 @@
+name: Application Build
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Directory containing package.json or pom.xml
+        required: false
+        default: .
+        type: string
+      node-version:
+        description: Node.js version to use
+        required: false
+        default: '20'
+        type: string
+      java-version:
+        description: Java version to use for Maven builds
+        required: false
+        default: '17'
+        type: string
+      build-command:
+        description: Build command to run
+        required: false
+        default: npm run build --if-present
+        type: string
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      WORKING_DIRECTORY: ${{ inputs.working-directory || '.' }}
+      NODE_VERSION: ${{ inputs.node-version || '20' }}
+      JAVA_VERSION: ${{ inputs.java-version || '17' }}
+      BUILD_COMMAND: ${{ inputs.build-command || 'npm run build --if-present' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java
+        if: hashFiles(format('{0}/pom.xml', env.WORKING_DIRECTORY)) != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - name: Set up Node.js
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != '' && hashFiles(format('{0}/package-lock.json', env.WORKING_DIRECTORY)) != ''
+        run: npm ci
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+      - name: Install dependencies without lockfile
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != '' && hashFiles(format('{0}/package-lock.json', env.WORKING_DIRECTORY)) == ''
+        run: npm install
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+      - name: Build application
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != ''
+        run: ${{ env.BUILD_COMMAND }}
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+      - name: Build Java application
+        if: hashFiles(format('{0}/pom.xml', env.WORKING_DIRECTORY)) != ''
+        run: mvn -B clean package
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+      - name: Package application
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != '' || hashFiles(format('{0}/pom.xml', env.WORKING_DIRECTORY)) != ''
+        run: tar -czf "${{ runner.temp }}/application-${{ github.sha }}.tar.gz" --exclude=node_modules --exclude=.git --exclude=target .
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+      - name: Publish build artifact and metadata
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != '' || hashFiles(format('{0}/pom.xml', env.WORKING_DIRECTORY)) != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-${{ github.sha }}
+          path: ${{ runner.temp }}/application-${{ github.sha }}.tar.gz
+      - name: No application manifest found
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) == '' && hashFiles(format('{0}/pom.xml', env.WORKING_DIRECTORY)) == ''
+        run: echo "No package.json or pom.xml found; application build skipped."

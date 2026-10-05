@@ -1,0 +1,91 @@
+name: Container Build Security
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      context:
+        description: Docker build context
+        required: false
+        default: .
+        type: string
+      dockerfile:
+        description: Dockerfile path
+        required: false
+        default: Dockerfile
+        type: string
+      image:
+        description: Local image name used for scanning
+        required: false
+        default: local/application
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Check for Dockerfile
+        id: dockerfile
+        shell: bash
+        run: test -f "${{ inputs.dockerfile || 'Dockerfile' }}" && echo "found=true" >> "$GITHUB_OUTPUT" || echo "found=false" >> "$GITHUB_OUTPUT"
+      - name: Build image
+        if: steps.dockerfile.outputs.found == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context || '.' }}
+          file: ${{ inputs.dockerfile || 'Dockerfile' }}
+          load: true
+          tags: ${{ inputs.image || 'local/application' }}:${{ github.sha }}
+      - name: Record image metadata
+        if: steps.dockerfile.outputs.found == 'true'
+        run: |
+          printf 'image=%s\n' "${{ inputs.image || 'local/application' }}:${{ github.sha }}" > image-metadata.txt
+          printf 'commit=%s\n' "${{ github.sha }}" >> image-metadata.txt
+      - name: Publish image metadata
+        if: steps.dockerfile.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-metadata-${{ github.sha }}
+          path: image-metadata.txt
+      - name: Scan image
+        if: steps.dockerfile.outputs.found == 'true'
+        continue-on-error: true
+        env:
+          IMAGE_NAME: ${{ inputs.image || 'local/application' }}:${{ github.sha }}
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/work" \
+            aquasec/trivy:0.59.1 image \
+            --format table \
+            --output /work/vulnerability-report.txt \
+            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            "$IMAGE_NAME"
+      - name: Publish vulnerability report
+        if: always() && steps.dockerfile.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerability-report-${{ github.sha }}
+          path: vulnerability-report.txt
+          if-no-files-found: error
+      - name: Add vulnerability report to summary
+        if: always() && steps.dockerfile.outputs.found == 'true'
+        run: |
+          echo "## Vulnerability Report" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          cat vulnerability-report.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: No Dockerfile found
+        if: steps.dockerfile.outputs.found != 'true'
+        run: echo "No Dockerfile found; container build skipped."

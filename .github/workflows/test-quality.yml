@@ -1,0 +1,69 @@
+name: Test Quality
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Directory containing package.json or pom.xml
+        required: false
+        default: .
+        type: string
+      node-version:
+        description: Node.js version to use
+        required: false
+        default: '20'
+        type: string
+      java-version:
+        description: Java version to use for Maven tests
+        required: false
+        default: '17'
+        type: string
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      WORKING_DIRECTORY: ${{ inputs.working-directory || '.' }}
+      NODE_VERSION: ${{ inputs.node-version || '20' }}
+      JAVA_VERSION: ${{ inputs.java-version || '17' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java
+        if: hashFiles(format('{0}/pom.xml', env.WORKING_DIRECTORY)) != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - uses: actions/setup-node@v4
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != ''
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != '' && hashFiles(format('{0}/package-lock.json', env.WORKING_DIRECTORY)) != ''
+        run: npm ci
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+      - name: Install dependencies without lockfile
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != '' && hashFiles(format('{0}/package-lock.json', env.WORKING_DIRECTORY)) == ''
+        run: npm install
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+      - name: Run tests
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != ''
+        run: npm test --if-present
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+      - name: Run Java tests
+        if: hashFiles(format('{0}/pom.xml', env.WORKING_DIRECTORY)) != ''
+        run: mvn -B test
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+      - name: Run lint
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) != ''
+        run: npm run lint --if-present
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+      - name: No application manifest found
+        if: hashFiles(format('{0}/package.json', env.WORKING_DIRECTORY)) == '' && hashFiles(format('{0}/pom.xml', env.WORKING_DIRECTORY)) == ''
+        run: echo "No package.json or pom.xml found; tests and lint skipped."

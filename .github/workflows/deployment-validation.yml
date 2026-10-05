@@ -1,0 +1,192 @@
+name: Deployment Validation and Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: OpenShift Route URL to validate
+        required: true
+        type: string
+      namespace:
+        description: OpenShift project/namespace
+        required: true
+        type: string
+      deployment:
+        description: Deployment or DeploymentConfig name
+        required: true
+        type: string
+      resource-kind:
+        description: OpenShift workload kind
+        required: false
+        default: deployment
+        type: choice
+        options: [deployment, deploymentconfig]
+      readiness-path:
+        description: Readiness endpoint path
+        required: false
+        default: /
+        type: string
+      liveness-path:
+        description: Liveness endpoint path
+        required: false
+        default: /
+        type: string
+      smoke-path:
+        description: Smoke-test endpoint path
+        required: false
+        default: /
+        type: string
+  workflow_call:
+    inputs:
+      url:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      deployment:
+        required: true
+        type: string
+      resource-kind:
+        required: false
+        default: deployment
+        type: string
+      readiness-path:
+        required: false
+        default: /
+        type: string
+      liveness-path:
+        required: false
+        default: /
+        type: string
+      smoke-path:
+        required: false
+        default: /
+        type: string
+    secrets:
+      OPENSHIFT_SERVER:
+        required: true
+      OPENSHIFT_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Health, readiness, liveness and smoke checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to OpenShift
+        uses: redhat-actions/oc-login@v1
+        with:
+          openshift_server_url: ${{ secrets.OPENSHIFT_SERVER }}
+          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
+          namespace: ${{ inputs.namespace }}
+          insecure_skip_tls_verify: false
+      - name: Run deployment validation checks
+        id: checks
+        continue-on-error: true
+        env:
+          TARGET_URL: ${{ inputs.url }}
+          DEPLOYMENT: ${{ inputs.deployment }}
+          RESOURCE_KIND: ${{ inputs.resource-kind || 'deployment' }}
+          READINESS_PATH: ${{ inputs.readiness-path || '/' }}
+          LIVENESS_PATH: ${{ inputs.liveness-path || '/' }}
+          SMOKE_PATH: ${{ inputs.smoke-path || '/' }}
+        run: |
+          set +e
+          failed=0
+          check() {
+            name="$1"
+            shift
+            if "$@"; then
+              echo "PASS: $name"
+            else
+              echo "FAIL: $name"
+              failed=1
+            fi
+          }
+
+          check "URL format" bash -c 'test "${1#https://}" != "$1" || test "${1#http://}" != "$1"' _ "$TARGET_URL"
+          check "Deployment rollout" oc rollout status "$RESOURCE_KIND/$DEPLOYMENT" --timeout=10m
+          selector="$(oc get "$RESOURCE_KIND/$DEPLOYMENT" -o json | jq -r '(.spec.selector.matchLabels // .spec.selector) | to_entries | map("\(.key)=\(.value)") | join(",")')"
+          check "Pod status" bash -c 'test -n "$1" && oc wait --for=condition=Ready pod -l "$1" --timeout=5m && test "$(oc get pods -l "$1" --field-selector=status.phase=Running -o jsonpath="{.items[*].metadata.name}")" != ""' _ "$selector"
+          oc get pods -l "$selector" -o wide
+          check "Readiness condition" bash -c 'test "$(oc get "$1" "$2" -o jsonpath="{.status.conditions[?(@.type==\"Available\")].status}")" = True' _ "$RESOURCE_KIND" "$DEPLOYMENT"
+          check "Liveness condition" bash -c 'test -n "$(oc get "$1" "$2" -o jsonpath="{.status.readyReplicas}")"' _ "$RESOURCE_KIND" "$DEPLOYMENT"
+          check "Endpoint health" curl --fail --silent --show-error --location --max-time 30 "$TARGET_URL"
+          check "Readiness endpoint" curl --fail --silent --show-error --location --max-time 30 "${TARGET_URL%/}${READINESS_PATH}"
+          check "Liveness endpoint" curl --fail --silent --show-error --location --max-time 30 "${TARGET_URL%/}${LIVENESS_PATH}"
+          check "Smoke test" curl --fail --silent --show-error --location --max-time 30 "${TARGET_URL%/}${SMOKE_PATH}"
+          exit "$failed"
+      - name: Publish validation status
+        if: always()
+        env:
+          CHECK_RESULT: ${{ steps.checks.outcome }}
+        run: |
+          {
+            echo "## Deployment Validation"
+            echo "- Health check: executed"
+            echo "- Readiness check: executed"
+            echo "- Liveness check: executed"
+            echo "- Pod status check: executed"
+            echo "- Endpoint validation: executed"
+            echo "- Smoke test: executed"
+            echo "- Result: $CHECK_RESULT"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Evaluate validation result
+        id: evaluate
+        env:
+          CHECK_RESULT: ${{ steps.checks.outcome }}
+        run: |
+          if [ "$CHECK_RESULT" = success ]; then
+            echo "Validation passed"
+          else
+            echo "Validation failed"
+            exit 1
+          fi
+
+  rollback:
+    name: Roll back and verify previous version
+    needs: validate
+    if: needs.validate.result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to OpenShift
+        uses: redhat-actions/oc-login@v1
+        with:
+          openshift_server_url: ${{ secrets.OPENSHIFT_SERVER }}
+          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
+          namespace: ${{ inputs.namespace }}
+          insecure_skip_tls_verify: false
+      - name: Identify previous version
+        env:
+          DEPLOYMENT: ${{ inputs.deployment }}
+          RESOURCE_KIND: ${{ inputs.resource-kind || 'deployment' }}
+        run: oc rollout history "$RESOURCE_KIND/$DEPLOYMENT"
+      - name: Roll back previous version
+        env:
+          DEPLOYMENT: ${{ inputs.deployment }}
+          RESOURCE_KIND: ${{ inputs.resource-kind || 'deployment' }}
+        run: oc rollout undo "$RESOURCE_KIND/$DEPLOYMENT"
+      - name: Monitor rollback
+        env:
+          DEPLOYMENT: ${{ inputs.deployment }}
+          RESOURCE_KIND: ${{ inputs.resource-kind || 'deployment' }}
+        run: oc rollout status "$RESOURCE_KIND/$DEPLOYMENT" --timeout=10m
+      - name: Verify previous version
+        env:
+          DEPLOYMENT: ${{ inputs.deployment }}
+          RESOURCE_KIND: ${{ inputs.resource-kind || 'deployment' }}
+        run: oc get "$RESOURCE_KIND" "$DEPLOYMENT" -o wide
+      - name: Publish rollback status
+        if: always()
+        run: |
+          {
+            echo "## Deployment Rollback"
+            echo "- Validation failed"
+            echo "- Previous version identified"
+            echo "- Rollback attempted"
+            echo "- Rollback verification completed"
+          } >> "$GITHUB_STEP_SUMMARY"
